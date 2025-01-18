@@ -1,0 +1,7 @@
+Pillow
+requests
+python-dotenv
+google-generativeai
+playsound
+pygame
+
