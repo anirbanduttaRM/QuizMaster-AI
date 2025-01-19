@@ -204,12 +204,24 @@ class QuizBotFrontend:
             self.time_remaining -= 1
             self.timer = self.window.after(1000, self.update_timer)
         else:
-            self.show_time_up_message()
+            #self.show_time_up_message()
             self.current_question_index += 1
             self.show_question()
 
-    def custom_message_box(self, title, message, image_path=None, sound_path=None, callback=None):
-        """Display a custom message box that disappears after 3 seconds and optionally calls a callback."""
+
+    def custom_message_box(self, title, message, image_path=None, sound_path=None, callback=None, close_after=3):
+        """
+        Display a custom message box that disappears after a specified number of seconds
+        and optionally calls a callback.
+
+        Args:
+            title (str): Title of the message box.
+            message (str): Message to display.
+            image_path (str, optional): Path to an image to display. Defaults to None.
+            sound_path (str, optional): Path to a sound file to play. Defaults to None.
+            callback (callable, optional): Function to call after the popup closes. Defaults to None.
+            close_after (int, optional): Number of seconds before closing the popup. Defaults to 3.
+        """
         # Optionally play a sound
         def play_sound_thread():
             if sound_path:
@@ -217,9 +229,10 @@ class QuizBotFrontend:
 
         threading.Thread(target=play_sound_thread).start()
 
+        # Create a new popup window
         popup = tk.Toplevel(self.window)
         popup.title(title)
-        popup.geometry("300x150")  # Smaller message box size
+        popup.geometry("300x150")  # Default smaller size
         popup.configure(bg="#f4f4f4")
 
         # Add an optional image to the popup
@@ -232,17 +245,27 @@ class QuizBotFrontend:
             img_label.image = img_tk
             img_label.pack(pady=5)
 
-        # Add the message
-        msg_label = tk.Label(popup, text=message, font=("Helvetica", 12), bg="#f4f4f4", fg="#333")
-        msg_label.pack(pady=5)
+        # Add the message with wrapping
+        msg_label = tk.Label(
+            popup,
+            text=message,
+            font=("Helvetica", 12),
+            bg="#f4f4f4",
+            fg="#333",
+            wraplength=280,  # Wrap text at 280 pixels (adjustable based on popup size)
+            justify="center"  # Center-align the text
+        )
+        msg_label.pack(pady=5, fill="both", expand=True)
 
-        # Automatically close the popup after 3 seconds and execute callback if provided
+        # Automatically close the popup after the specified time and execute callback if provided
         def close_popup():
-            popup.destroy()
-            if callback:
-                callback()
+            if popup.winfo_exists():  # Ensure the popup still exists before trying to destroy it
+                popup.destroy()
+                if callback:
+                    callback()
 
-        popup.after(3000, close_popup)
+        # Schedule the popup to close after the specified time
+        popup.after(close_after * 1000, close_popup)  # Convert seconds to milliseconds
 
     def next_question(self):
         """Handle the next question and check the answer."""
@@ -306,13 +329,18 @@ class QuizBotFrontend:
 
     def end_quiz(self):
         """Handle the end of the quiz."""
+        def quit_application():
+            """Quit the application after the message box closes."""
+            self.window.quit()
+
         self.custom_message_box(
-            "Quiz Completed",
-            f"Congratulations! You've completed the quiz. Your final score is {self.score}/{len(self.quiz_data)}.",
-            "congratulations.png",
-            "congratulations.mp3"
+            title="Quiz Completed",
+            message=f"Congratulations! You've completed the quiz. Your final score is {self.score}/{len(self.quiz_data)}.",
+            image_path="congratulations.png",
+            sound_path="congratulations.mp3",
+            close_after=10,  # Keep the message box open for 10 seconds
+            callback=quit_application  # Quit the application after the message box closes
         )
-        self.window.quit()  # Quit the application after the final OK
 
     def show_time_up_message(self):
         """Handle the 'time up' message."""
