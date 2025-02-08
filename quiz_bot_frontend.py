@@ -204,9 +204,10 @@ class QuizBotFrontend:
             self.time_remaining -= 1
             self.timer = self.window.after(1000, self.update_timer)
         else:
-            #self.show_time_up_message()
-            self.current_question_index += 1
-            self.show_question()
+            # Show the correct answer when time is up
+            question_data = self.quiz_data[self.current_question_index]
+            correct_answer = question_data["correct_answer"]
+            self.show_time_up_message(correct_answer)
 
 
     def custom_message_box(self, title, message, image_path=None, sound_path=None, callback=None, close_after=3):
@@ -267,65 +268,68 @@ class QuizBotFrontend:
         # Schedule the popup to close after the specified time
         popup.after(close_after * 1000, close_popup)  # Convert seconds to milliseconds
 
-    def next_question(self):
+    def next_question(self, skip_message_box=False):
         """Handle the next question and check the answer."""
         # Cancel the current timer if it's running
         if self.timer:
             self.window.after_cancel(self.timer)
 
-        # Get the selected option
-        selected_option = self.options_var.get()
-
-        # If no option is selected, show a warning and return
-        # if not selected_option:
-        #     messagebox.showwarning("No answer selected", "Please select an option before proceeding.")
-        #     return
-
-        # Clean up both selected option and correct answer (removes prefixes and extra spaces)
-        def clean_option(option):
-            """Remove any prefixes (like 'a)', 'b)') and extra spaces."""
-            return re.sub(r'^[a-d]\)\s*', '', option).strip().lower()
-
-        # Clean both selected and correct answers
-        selected_option_clean = clean_option(selected_option)
-        question_data = self.quiz_data[self.current_question_index]
-        correct_answer_clean = clean_option(question_data["correct_answer"])
-
-        print(f"Correct Answer: {correct_answer_clean}")
-        print(f"Selected Option: {selected_option_clean}")
-
-        # Compare the cleaned selected option with the correct answer
-        if selected_option_clean == correct_answer_clean:
-            self.score += 1
-            self.custom_message_box(
-                "Correct!",
-                "Great job! You got the answer right.",
-                "correct.png",
-                "correct.mp3"
-            )
+        # Skip showing a custom message box if the flag is set
+        if skip_message_box:
+            self.current_question_index += 1
         else:
-            self.custom_message_box(
-                "Incorrect",
-                f"Sorry! The correct answer was: {correct_answer_clean}.",
-                "incorrect.png",
-                "incorrect.mp3"
-            )
+            # Get the selected option
+            selected_option = self.options_var.get()
 
-        # Move to the next question
-        self.current_question_index += 1
+            # Clean up both selected option and correct answer (removes prefixes and extra spaces)
+            def clean_option(option):
+                """Remove any prefixes (like 'a)', 'b)') and extra spaces."""
+                if option and isinstance(option, str):  # Ensure the option is a non-empty string
+                    return re.sub(r'^[a-d]\)\s*', '', option).strip().lower()
+                return option.strip().lower()  # Fallback to just stripping and lowering
 
-        # If all questions are answered, show the final score
+            # Clean both selected and correct answers
+            selected_option_clean = clean_option(selected_option)
+            question_data = self.quiz_data[self.current_question_index]
+            correct_answer_clean = clean_option(question_data["correct_answer"])
+
+            # Debugging outputs
+            print(question_data)
+            print(f"Current Question Index: {self.current_question_index}")
+            print(f"Raw Selected Option: {selected_option}")
+            print(f"Raw Correct Answer: {question_data['correct_answer']}")
+            print(f"Cleaned Selected Option: {selected_option_clean}")
+            print(f"Cleaned Correct Answer: {correct_answer_clean}")
+
+            # Compare the cleaned selected option with the correct answer
+            if selected_option_clean == correct_answer_clean:
+                self.score += 1
+                self.custom_message_box(
+                    "Correct!",
+                    "Great job! You got the answer right.",
+                    "correct.png",
+                    "correct.mp3"
+                )
+            else:
+                self.custom_message_box(
+                    "Incorrect",
+                    f"Sorry! The correct answer was: {correct_answer_clean}.",
+                    "incorrect.png",
+                    "incorrect.mp3"
+                )
+
+            # Move to the next question
+            self.current_question_index += 1
+
+        # Centralized quiz completion check
         if self.current_question_index >= len(self.quiz_data):
-            self.custom_message_box(
-                "Quiz Completed",
-                f"Congratulations! You've completed the quiz. Your final score is {self.score}/{len(self.quiz_data)}.",
-                "congratulations.png",
-                "congratulations.mp3",
-                callback=self.end_quiz  # Callback to end the quiz
-            )
-        else:
-            # Show the next question
-            self.show_question()
+            # Pause for 5 seconds before calling the end_quiz function
+            self.window.after(5000, self.end_quiz)  
+            return  # Exit the method after scheduling the end_quiz function
+
+
+        # Show the next question if the quiz is not completed
+        self.show_question()
 
     def end_quiz(self):
         """Handle the end of the quiz."""
@@ -342,14 +346,14 @@ class QuizBotFrontend:
             callback=quit_application  # Quit the application after the message box closes
         )
 
-    def show_time_up_message(self):
+    def show_time_up_message(self, correct_answer):
         """Handle the 'time up' message."""
         self.custom_message_box(
             "Time's Up",
-            "Your time is up! Moving to the next question.",
+            f"Your time is up! The correct answer was: {correct_answer}.",
             "time_up.png",
             "incorrect.mp3",
-            callback=self.next_question  # Call next_question after the message box is closed
+            callback=lambda: self.next_question(skip_message_box=True)  # Skip the next message box
         )
 
 # Assuming `bot_backend` is a predefined object that fetches quiz data
