@@ -1,10 +1,11 @@
 import tkinter as tk
 from tkinter import messagebox, ttk
-from playsound import playsound
+#from playsound import playsound
 import threading  # To avoid blocking the UI with sound playback
 from PIL import Image, ImageTk
 import re
 import pygame
+import sys
 
 class QuizBotFrontend:
     def __init__(self, bot_backend):
@@ -274,6 +275,12 @@ class QuizBotFrontend:
         if self.timer:
             self.window.after_cancel(self.timer)
 
+        # Centralized quiz completion check **before accessing quiz_data**
+        if self.current_question_index >= len(self.quiz_data):
+            print(f"Debug: No more questions! Index: {self.current_question_index}, Total: {len(self.quiz_data)}")
+            self.window.after(5000, self.end_quiz)  # Pause for 5 seconds before ending
+            return  # Prevent further execution
+
         # Skip showing a custom message box if the flag is set
         if skip_message_box:
             self.current_question_index += 1
@@ -288,18 +295,15 @@ class QuizBotFrontend:
                     return re.sub(r'^[a-d]\)\s*', '', option).strip().lower()
                 return option.strip().lower()  # Fallback to just stripping and lowering
 
-            # Clean both selected and correct answers
-            selected_option_clean = clean_option(selected_option)
+            # **Ensure index is valid before accessing quiz_data**
+            if self.current_question_index >= len(self.quiz_data):
+                print(f"Error: Attempted to access question index {self.current_question_index}, but only {len(self.quiz_data)} available.")
+                return  
+
+            # Fetch question data safely
             question_data = self.quiz_data[self.current_question_index]
             correct_answer_clean = clean_option(question_data["correct_answer"])
-
-            # Debugging outputs
-            print(question_data)
-            print(f"Current Question Index: {self.current_question_index}")
-            print(f"Raw Selected Option: {selected_option}")
-            print(f"Raw Correct Answer: {question_data['correct_answer']}")
-            print(f"Cleaned Selected Option: {selected_option_clean}")
-            print(f"Cleaned Correct Answer: {correct_answer_clean}")
+            selected_option_clean = clean_option(selected_option)
 
             # Compare the cleaned selected option with the correct answer
             if selected_option_clean == correct_answer_clean:
@@ -313,7 +317,7 @@ class QuizBotFrontend:
             else:
                 self.custom_message_box(
                     "Incorrect",
-                    f"Sorry! The correct answer was: {correct_answer_clean}.",
+                    f"Sorry! The correct answer was: {question_data['correct_answer']}.",
                     "incorrect.png",
                     "incorrect.mp3"
                 )
@@ -321,30 +325,41 @@ class QuizBotFrontend:
             # Move to the next question
             self.current_question_index += 1
 
-        # Centralized quiz completion check
-        if self.current_question_index >= len(self.quiz_data):
-            # Pause for 5 seconds before calling the end_quiz function
-            self.window.after(5000, self.end_quiz)  
-            return  # Exit the method after scheduling the end_quiz function
-
-
-        # Show the next question if the quiz is not completed
-        self.show_question()
+        # **Re-check before calling show_question**
+        if self.current_question_index < len(self.quiz_data):
+            self.show_question()
+        else:
+            print("Quiz completed! No more questions.")
+            self.end_quiz()
 
     def end_quiz(self):
-        """Handle the end of the quiz."""
-        def quit_application():
-            """Quit the application after the message box closes."""
-            self.window.quit()
+        """Handle the end of the quiz and exit the application after showing the message for 10 seconds."""
 
-        self.custom_message_box(
-            title="Quiz Completed",
-            message=f"Congratulations! You've completed the quiz. Your final score is {self.score}/{len(self.quiz_data)}.",
-            image_path="congratulations.png",
-            sound_path="congratulations.mp3",
-            close_after=10,  # Keep the message box open for 10 seconds
-            callback=quit_application  # Quit the application after the message box closes
-        )
+        def show_message():
+            """Show the final score message, wait for 10 seconds, then exit."""
+            self.custom_message_box(
+                title="Quiz Completed",
+                message=f"Congratulations! You've completed the quiz. Your final score is {self.score}/{len(self.quiz_data)}.",
+                image_path="congratulations.png",
+                sound_path="congratulations.mp3",
+                close_after=10  # Ensure this parameter is being used
+            )
+
+            # Schedule exit_application after 10 seconds (10000 milliseconds)
+            self.window.after(10000, self.exit_application)
+
+        # Hide the main quiz window
+        self.window.withdraw()  
+
+        # Close the quiz frame
+        self.quiz_frame.pack_forget()
+
+        # Destroy quiz window if it exists
+        if hasattr(self, "quiz_window"):
+            self.quiz_window.destroy()
+
+        # Show the message and delay exit
+        show_message()
 
     def show_time_up_message(self, correct_answer):
         """Handle the 'time up' message."""
@@ -355,6 +370,13 @@ class QuizBotFrontend:
             "incorrect.mp3",
             callback=lambda: self.next_question(skip_message_box=True)  # Skip the next message box
         )
+
+    def exit_application(self):
+        """Exit the application safely."""
+        print("Exiting application...")  # Debugging print (optional)
+        self.window.quit()  # Stop the Tkinter main loop
+        self.window.destroy()  # Destroy the window completely
+        sys.exit()  # Ensure the script exits properly
 
 # Assuming `bot_backend` is a predefined object that fetches quiz data
 # bot_backend = SomeBackendClass()
